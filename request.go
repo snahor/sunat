@@ -45,10 +45,8 @@ func Search(q string) ([]map[string]string, error) {
 		postData.Set("nrodoc", q)
 		postData.Set("tipdoc", "1")
 	} else if isRuc(q) {
-		result, err := GetByRuc(q)
-		data := make([]map[string]string, 1)
-		data[0] = result
-		return data, err
+		postData.Set("accion", "consPorRuc")
+		postData.Set("nroRuc", q)
 	} else if isName(q) {
 		postData.Set("accion", "consPorRazonSoc")
 		postData.Set("razSoc", q)
@@ -140,37 +138,5 @@ func Search(q string) ([]map[string]string, error) {
 	return data, nil
 }
 
-func GetByRuc(ruc string) (map[string]string, error) {
-	if !isRuc(ruc) {
-		return nil, errors.New("RUC is not valid.")
-	}
-	resp, _ := http.Get(ruc_url + ruc)
-	doc, err := goquery.NewDocumentFromResponse(resp)
-	if err != nil {
-		log.Print(err)
-		return nil, err
-	}
-	if c := doc.Find("#card1 small").First().Length(); c > 0 {
-		return nil, errors.New("RUC is not valid.")
-	}
-	data := map[string]string{
-		"ruc": ruc,
-	}
-	doc.Find("small").Each(func(i int, s *goquery.Selection) {
-		switch i {
-		case 0:
-			data["name"] = strings.TrimSpace(strings.Split(strings.SplitN(s.Text(), ".", 2)[1], "-")[1])
-		case 3:
-			data["status"] = strings.Split(s.Text(), ".")[1]
-		case 6:
-			data["address"] = strings.TrimSpace(strings.SplitN(s.Text(), ".", 2)[1])
-		case 7:
-			data["condition"] = strings.TrimSpace(s.Find("b").Text())
-		case 10:
-			data["type"] = strings.TrimSpace(strings.SplitN(s.Text(), ".", 2)[1])
-		case 11:
-			data["dni"] = strings.TrimSpace(strings.Split(s.Text(), ":")[1])
 		}
-	})
-	return data, nil
 }
