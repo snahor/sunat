@@ -1,10 +1,10 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
-	"log"
 	"net/http"
+
+	"github.com/gorilla/mux"
 )
 
 var (
@@ -12,31 +12,33 @@ var (
 	port = flag.String("port", "8888", "port to listen on")
 )
 
-type Results struct {
-	Items   []map[string]string `json:"items"`
-	Total   int                 `json:"total"`
-	PerPage int                 `json:"per_page"`
-	Page    int                 `json:"page"`
+func SearchHandler(w http.ResponseWriter, r *http.Request) {
+	results, _ := Search(r.FormValue("q"))
+	ServeFormatted(w, r, results)
 }
 
-func searchHandler(w http.ResponseWriter, r *http.Request) {
-	q := r.FormValue("q")
-	data, err := Search(q)
-	results := Results{data, len(data), 30, 1}
-	w.Header().Set("Content-Type", "application/json")
+func DetailHandler(w http.ResponseWriter, r *http.Request) {
+	detail, err := RUCDetail(mux.Vars(r)["ruc"])
 	if err != nil {
-		log.Print(err)
-		w.WriteHeader(500)
+		ServeFormatted(w, r, err)
 	}
-	b, _ := json.Marshal(results)
-	w.Write(b)
+	ServeFormatted(w, r, detail)
 }
 
 func main() {
 	if !isTesseractInstalled() {
-		log.Fatal("Tesseract is not installed.")
+		panic("Tesseract is not installed.")
 	}
+
+	r := mux.NewRouter()
+	r.HandleFunc("/search", SearchHandler)
+	r.HandleFunc("/detail/{ruc:\\d{11}}", DetailHandler)
+	http.Handle("/", r)
+
 	flag.Parse()
-	http.HandleFunc("/", searchHandler)
-	http.ListenAndServe(*host+":"+*port, nil)
+
+	if err := http.ListenAndServe(*host+":"+*port, nil); err != nil {
+		println("Couldn't start the server.")
+		println("Reason:", err.Error())
+	}
 }
