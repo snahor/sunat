@@ -1,0 +1,195 @@
+
+
+
+<html>
+<head>
+
+<title>Documento sin t&iacute;tulo</title>
+</head>
+<link href="/a/css/estilos2_0.css" rel="stylesheet">
+<link href="/a/css/msunat/estilos_msunat1_0.css" rel="stylesheet">
+<script language="JavaScript" src="/a/js/js.js"></script>
+<script language="JavaScript" src="/a/js/paginacion.js"></script>
+<script languaje="JavaScript" type="text/javascript">
+function sendNroRuc(cc){
+    
+	    document.selecXNroRuc.nroRuc.value = cc;
+	    document.selecXNroRuc.submit();
+    
+    
+}
+
+function regresar(){
+	document.location.replace("FrameCriterioBusquedaCelular.jsp");
+}
+
+</script>
+<body>	 	
+<div id="header">
+	<div id="back"><a href="http://m.sunat.gob.pe/index.html" class="home-tab"><img height="42" width="77" align="left" alt="Inicio" src="/a/imagenes/msunat/inicio.png"></a></div>
+    <div id="logo"><img height="42" width="187" align="middle" alt="SUNAT Móvil" src="/a/imagenes/msunat/logo.png"></div>
+</div>
+
+<table cellpadding="3" cellspacing="2" width="100%" border=0>
+<tr>
+  <!-- <td class="t1"><font size="2">RELACI&Oacute;N DE CONTRIBUYENTES</font></td>  -->
+  <td bgcolor="white" align="center" class="T3"><b>RELACI&Oacute;N DE CONTRIBUYENTES</b></td>
+</tr>
+</table>
+
+<br>
+<table class=form-table cellSpacing=2 cellPadding=3 width="100%">
+<tr>
+  <td>
+     
+     
+
+
+
+
+
+
+     <table border="0" cellspacing="0" width="100%">
+	<tr><td class="lnk7" align="right"  width="50%">1 a 6 de 6</td></tr>
+</table>
+<table width="100%" cellspacing="0">
+<tr>
+	<td align="left" width="10%" class="lnk7">
+		
+	</td>
+	<td align="center" class="lnk7">
+		
+	</td>
+	<td align="right" width="10%" class="lnk7">
+		
+	</td>
+</tr>
+</table>
+     <table cellSpacing=0 cellPadding=0 width="100%">
+     <tr>
+	   <td class=beta>
+          <table cellSpacing=1 cellPadding=2 width="100%">
+          
+          <tr>
+            <th class=beta noWrap>Ruc</th>
+            <th class=beta noWrap>Nombre / Raz&oacute;n Social </th>
+            <th class=beta noWrap>Ubicaci&oacute;n</th>
+            <th class=beta noWrap>Estado</th>
+          </tr>
+	      
+	      
+	      <tr>
+            <td align="center" class="bg">
+	           <a href="javascript:sendNroRuc(20485989278)">20485989278</a>
+	        </td>
+            <td class="bg" align="left"> MICROSOFT DELIA EMPRESA INDIVIDUAL DE RESPONSABILIDAD LIMITADA </td>
+	        <td class="bg" align="left"> HUANCAYO </td>
+            <td class="bg" align="left"> BAJA DE OFICIO </td>
+	      </tr>
+	      
+	      
+	      <tr>
+            <td align="center" class="bg">
+	           <a href="javascript:sendNroRuc(20524897254)">20524897254</a>
+	        </td>
+            <td class="bg" align="left"> LICENCIAS MICROSOFT PERU S.R.L. </td>
+	        <td class="bg" align="left"> LIMA </td>
+            <td class="bg" align="left"> ACTIVO </td>
+	      </tr>
+	      
+	      
+	      <tr>
+            <td align="center" class="bg">
+	           <a href="javascript:sendNroRuc(20254138577)">20254138577</a>
+	        </td>
+            <td class="bg" align="left"> MICROSOFT PERU S.R.L. </td>
+	        <td class="bg" align="left"> LIMA </td>
+            <td class="bg" align="left"> ACTIVO </td>
+	      </tr>
+	      
+	      
+	      <tr>
+            <td align="center" class="bg">
+	           <a href="javascript:sendNroRuc(20352439411)">20352439411</a>
+	        </td>
+            <td class="bg" align="left"> MICROSOFT WINDOWS SAC </td>
+	        <td class="bg" align="left"> CORONEL PORTILLO </td>
+            <td class="bg" align="left"> BAJA DE OFICIO </td>
+	      </tr>
+	      
+	      
+	      <tr>
+            <td align="center" class="bg">
+	           <a href="javascript:sendNroRuc(20552860358)">20552860358</a>
+	        </td>
+            <td class="bg" align="left"> INTERNATIONAL ASSOCIATION OF MICROSOFT CHANNEL PARTNERS PERU IAMCP PERU </td>
+	        <td class="bg" align="left"> LIMA </td>
+            <td class="bg" align="left"> BAJA DE OFICIO </td>
+	      </tr>
+	      
+	      
+	      <tr>
+            <td align="center" class="bg">
+	           <a href="javascript:sendNroRuc(20305435211)">20305435211</a>
+	        </td>
+            <td class="bg" align="left"> JC COMPUTER & MICROSOF S.A. </td>
+	        <td class="bg" align="left"> LIMA </td>
+            <td class="bg" align="left"> BAJA DE OFICIO </td>
+	      </tr>
+	      
+          
+		  </table>	
+		  <FORM method="POST" name="formPaginacion" action="/cl-ti-itmrconsruc/DatosRazSocCel.jsp">
+	<INPUT type="hidden" name="tamanioPagina"><INPUT type="hidden" name="pagina">
+</FORM>
+<FORM action="/cl-ti-itmrconsruc/DatosRazSocCel.jsp" method="POST" id="NavigFormNext" name="NavigFormNext">
+	<INPUT type="hidden" name="currPage" Value = "1"><INPUT type="hidden" name="Action" Value = "next">
+</FORM>
+<FORM action="/cl-ti-itmrconsruc/DatosRazSocCel.jsp" method="POST" id="NavigFormBack" name="NavigFormBack">
+<INPUT type="hidden" name="currPage" Value = "0"><INPUT type="hidden" name="Action" Value = "back" >
+</FORM>
+   
+	   </td>
+	 </tr>
+     </table>
+  </td>
+</tr>
+</table>
+<table>
+<tr>
+  <td>
+  <form action="/cl-ti-itmrconsruc/jcrS03Alias" method="post" name="selecXNroRuc">
+    <input type="hidden" name="accion" value="consPorRuc">
+	<input type="hidden" name="actReturn" value="1">
+	<input type="hidden" name="nroRuc" value="">
+	<input type="hidden" name="numRnd" value="-205903510">	
+  </form>
+  </td>
+</tr>
+</table>
+
+		<table border="0" cellpadding="0" cellspacing="3" width="100%" >
+		<tr><td></td></tr>
+		<tr><td></td></tr>
+		<tr align="center">
+	    <td>
+	    <input type="button" class="form-button"  value=" Nueva Consulta " onClick="javascript:regresar()">&nbsp;
+	    <input class="form-button" type="button" value=" Regresar " onClick="history.go(-1)">
+	    </td>
+		</tr>    
+		</table>
+
+<table align="center" border="0" cellpadding="0" width="90%">
+<tr>
+<td>
+</td>
+</tr>
+</table>
+<table width="100%" cellspacing="3" cellpadding="0">
+<tr><td></td></tr>
+<tr><td></td></tr>
+
+<tr><th class="bgn"><font size="1">Copyright &copy; SUNAT 2010 - 2015</font></th></tr>
+</table>
+</body>
+</html>
