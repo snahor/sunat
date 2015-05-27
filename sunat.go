@@ -1,4 +1,4 @@
-package main
+package sunat
 
 import (
 	"errors"
@@ -10,6 +10,7 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"os"
+	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
@@ -19,28 +20,25 @@ import (
 )
 
 const (
-	SearchURL  = "http://www.sunat.gob.pe/cl-ti-itmrconsruc/jcrS00Alias"
-	CaptchaURL = "http://www.sunat.gob.pe/cl-ti-itmrconsruc/captcha?accion=image"
-	DetailURL  = "http://www.sunat.gob.pe/w/wapS01Alias?ruc="
-	PagingURL  = "http://www.sunat.gob.pe/cl-ti-itmrconsruc/datosRazSoc"
+	searchURL  = "http://www.sunat.gob.pe/cl-ti-itmrconsruc/jcrS03Alias"
+	captchaURL = "http://www.sunat.gob.pe/cl-ti-itmrconsruc/captcha?accion=image"
+	detailURL  = "http://www.sunat.gob.pe/cl-ti-itmrconsruc/DatosRazSocCel.jsp"
+	perPage    = 30
 )
 
 var (
-	ErrInvalidRUC       = errors.New("Invalid RUC")
-	ErrNonexistentRUC   = errors.New("RUC doesn't exist")
-	ErrUnexpected       = errors.New("Unexpected error")
-	ErrSUNAT            = errors.New("Unexpected error from SUNAT")
-	ErrUnsupportedValue = errors.New("Unsupported value")
-	ErrCaptcha          = errors.New("Captcha error")
+	timeOut              = time.Duration(10 * time.Second)
+	ErrInvalidCaptcha    = errors.New("Invalid Captcha")
+	ErrValueNotSupported = errors.New("Value not supported")
+	ErrInvalidRUC        = errors.New("Invalid RUC")
 )
-
-var timeout = time.Duration(10 * time.Second)
 
 type Result struct {
 	Ruc      string `json:"ruc"`
 	Name     string `json:"name"`
 	Location string `json:"location"`
 	Status   string `json:"status"`
+	//c        *http.Client
 }
 
 type Metadata struct {
@@ -49,116 +47,220 @@ type Metadata struct {
 	Page    int `json:"page"`
 }
 
+type Detail struct {
+	Status    string `json:"status"`
+	Name      string `json:"name"`
+	Ruc       string `json:"ruc"`
+	Address   string `json:"address"`
+	Type      string `json:"type"`
+	Condition string `json:"condition"`
+	Dni       string `json:"dni"`
+}
+
 type Results struct {
 	Results  []Result `json:"results"`
 	Metadata Metadata `json:"_meta"`
 }
 
-func dialTimeout(network, addr string) (net.Conn, error) {
-	return net.DialTimeout(network, addr, timeout)
+func (d *Detail) ToResults() *Results {
+	rs := &Results{}
+	rs.Metadata.Total = 1
+	rs.Metadata.PerPage = perPage
+	rs.Results = []Result{
+		Result{
+			Name:     d.Name,
+			Ruc:      d.Ruc,
+			Location: d.Address,
+			Status:   d.Status,
+		},
+	}
+	return rs
 }
 
-func hasError(doc *goquery.Document) bool {
-	result := doc.Find("p.error").First()
-	if result.Length() > 0 {
-		text := strings.TrimSpace(result.Text())
-		log.Print(text)
-		return text != ""
-	}
-	return false
-}
-
-func guessCaptcha(client *http.Client) (string, error) {
-	resp, err := client.Get(CaptchaURL)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	tmpfile, err := ioutil.TempFile("/tmp", "img")
-	if err != nil {
-		return "", err
-	}
-	defer tmpfile.Close()
-
-	if _, err := io.Copy(tmpfile, resp.Body); err != nil {
-		return "", err
-	}
-
-	captcha := captchaToText(tmpfile.Name())
-	if err := os.Remove(tmpfile.Name()); err != nil {
-		return "", err
-	}
-
-	if captcha == "" {
-		return "", errors.New("Could not recognize image.")
-	}
-
-	return captcha, nil
+func (r *Result) Detail() (*Detail, error) {
+	client, _ := newHttpClient()
+	return getDetail(r.Ruc, client)
 }
 
 func Search(q string) (*Results, error) {
-	postData := url.Values{}
-
-	if isDni(q) {
-		postData.Set("accion", "consPorTipdoc")
-		postData.Set("nrodoc", q)
-		postData.Set("tipdoc", "1")
-	} else if isRuc(q) {
-		postData.Set("accion", "consPorRuc")
-		postData.Set("nroRuc", q)
-	} else if isName(q) {
-		postData.Set("accion", "consPorRazonSoc")
-		postData.Set("razSoc", q)
-	} else {
-		return nil, ErrUnsupportedValue
+	data := make(url.Values)
+	data.Set("contexto", "ti-it")
+	switch {
+	case isDni(q):
+		data.Set("accion", "consPorTipdoc")
+		data.Set("nrodoc", q)
+		data.Set("tipdoc", "1")
+	case isName(q):
+		data.Set("accion", "consPorRazonSoc")
+		data.Set("razSoc", q)
+	case true:
+		return nil, ErrValueNotSupported
 	}
 
-	transport := http.Transport{
-		Dial: dialTimeout,
+	client, err := newHttpClient()
+	if err != nil {
+		return nil, err
 	}
 
-	cookieJar, _ := cookiejar.New(nil)
+	captcha, err := getCaptcha(client)
+	if err != nil {
+		return nil, err
+	}
+	data.Set("codigo", captcha)
+
+	res, err := client.PostForm(searchURL, data)
+	if err != nil {
+		return nil, err
+	}
+	results, err := parseResults(res)
+	if err != nil {
+		return nil, err
+	}
+	return results, nil
+}
+
+func GetDetail(q string) (*Detail, error) {
+	if !isRuc(q) {
+		return nil, ErrInvalidRUC
+	}
+
+	client, err := newHttpClient()
+	if err != nil {
+		return nil, err
+	}
+
+	detail, err := getDetail(q, client)
+	if err != nil {
+		return nil, err
+	}
+
+	return detail, nil
+}
+
+func dialTimeout(network, addr string) (net.Conn, error) {
+	return net.DialTimeout(network, addr, timeOut)
+}
+
+func newHttpClient() (*http.Client, error) {
+	transport := http.Transport{Dial: dialTimeout}
+	jar, _ := cookiejar.New(nil)
 	client := &http.Client{
-		Jar:       cookieJar,
+		Jar:       jar,
 		Transport: &transport,
 	}
 
-	resp, err := client.Head(SearchURL)
+	res, err := client.Head(searchURL)
 	if err != nil {
-		log.Print(err)
-		return nil, ErrSUNAT
+		return nil, err
 	}
-	defer resp.Body.Close()
+	defer res.Body.Close()
 
-	captcha, err := guessCaptcha(client)
+	return client, nil
+}
+
+func getCaptcha(c *http.Client) (string, error) {
+	log.Print("Getting captcha...")
+	res, err := c.Get(captchaURL)
 	if err != nil {
-		log.Print(err)
-		return nil, ErrUnexpected
+		return "", err
+	}
+	defer res.Body.Close()
+
+	file, err := ioutil.TempFile("/tmp", "img")
+	if err != nil {
+		return "", err
 	}
 
-	postData.Set("codigo", captcha)
-	postData.Set("contexto", "ti-it")
+	// write image
+	if _, err := io.Copy(file, res.Body); err != nil {
+		return "", err
+	}
+	log.Printf("Closing temp image: %q...", file.Name())
+	defer file.Close()
 
-	resp2, err := client.PostForm(SearchURL, postData)
+	text, err := captchaToText(file.Name())
+	log.Printf("Removing temp image: %q...", file.Name())
+	defer os.Remove(file.Name())
+
 	if err != nil {
-		log.Print(err)
+		return "", err
+	}
+
+	log.Printf("Captcha: %q", text)
+
+	// captcha must have 4 letters
+	if ok, err := regexp.MatchString("^[A-Z]{4}$", text); !ok || err != nil {
+		return "", ErrInvalidCaptcha
+	}
+	return text, nil
+}
+
+func getDetail(ruc string, client *http.Client) (*Detail, error) {
+	data := make(url.Values)
+	data.Set("contexto", "ti-it")
+	data.Set("accion", "consPorRuc")
+	data.Set("nroRuc", ruc)
+
+	captcha, err := getCaptcha(client)
+	if err != nil {
+		return nil, ErrInvalidCaptcha
+	}
+	data.Set("codigo", captcha)
+
+	res, err := client.PostForm(searchURL, data)
+	if err != nil {
 		return nil, err
 	}
 
-	doc, err := goquery.NewDocumentFromResponse(resp2)
+	detail, err := parseDetail(res)
 	if err != nil {
-		log.Print(err)
 		return nil, err
 	}
 
-	if hasError(doc) {
-		return nil, ErrSUNAT
+	return detail, nil
+}
+
+func captchaToText(path string) (string, error) {
+	output, err := exec.Command(
+		"tesseract",
+		path,
+		"stdout",
+		"-psm", "8",
+		"-c", "tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+	).Output()
+
+	if err != nil {
+		return "", err
 	}
 
-	rows := doc.Find("td.beta table tr")
+	return string(output[:4]), nil
+}
+
+func hasError(doc *goquery.Document) error {
+	result := doc.Find("p.error").First()
+	if result.Length() > 0 {
+		return errors.New(strings.TrimSpace(result.Text()))
+	}
+	return nil
+}
+
+func trim(s string) string {
+	return strings.TrimSpace(s)
+}
+
+func parseResults(res *http.Response) (*Results, error) {
+	log.Print("Parsing results...")
+	doc, err := goquery.NewDocumentFromResponse(res)
+	if err != nil {
+		return nil, err
+	}
+	if err = hasError(doc); err != nil {
+		return nil, err
+	}
 
 	results := &Results{}
+
+	rows := doc.Find("td.beta table tr")
 
 	// length includes the "table header"
 	length := rows.Length()
@@ -166,29 +268,61 @@ func Search(q string) (*Results, error) {
 	if length < 2 {
 		results.Results = make([]Result, 0)
 	} else {
-		re := regexp.MustCompile("(\\d+)$")
-
-		total, err := strconv.Atoi(re.FindString(doc.Find("td.lnk7").First().Text()))
-		if err != nil {
-			total = 0
+		re := regexp.MustCompile("(\\d+)")
+		ns := re.FindAllString(doc.Find("td.lnk7").First().Text(), -1)
+		if len(ns) == 3 {
+			from, _ := strconv.Atoi(ns[0])
+			total, _ := strconv.Atoi(ns[2])
+			results.Metadata.Page = (from / perPage) + 1
+			results.Metadata.Total = total
 		}
-		results.Metadata.Total = total
-		results.Metadata.PerPage = 30
+
+		results.Metadata.PerPage = perPage
 
 		rows.Slice(1, length).Each(func(i int, s *goquery.Selection) {
 			cols := s.Find("td")
-			result := Result{
-				// RUC
-				strings.TrimSpace(cols.Eq(0).Find("a").Text()),
-				// Name
-				strings.TrimSpace(cols.Eq(1).Text()),
-				// Location
-				strings.TrimSpace(cols.Eq(2).Text()),
-				// Status
-				strings.TrimSpace(cols.Eq(3).Text()),
-			}
-			results.Results = append(results.Results, result)
+			results.Results = append(results.Results, Result{
+				Ruc:      trim(cols.Eq(0).Find("a").Text()),
+				Name:     trim(cols.Eq(1).Text()),
+				Location: trim(cols.Eq(2).Text()),
+				Status:   trim(cols.Eq(3).Text()),
+			})
 		})
 	}
 	return results, nil
+}
+
+func parseDetail(res *http.Response) (*Detail, error) {
+	doc, err := goquery.NewDocumentFromResponse(res)
+	if err != nil {
+		return nil, err
+	}
+	if err = hasError(doc); err != nil {
+		return nil, err
+	}
+	detail := &Detail{}
+	rows := doc.Find("#print table tr")
+	rows.Slice(1, rows.Length()).Each(func(i int, s *goquery.Selection) {
+		l := trim(s.Find("td.bgn").Text())
+		v := trim(s.Find("td.bg").Text())
+		//log.Printf("Label: %q Value: %q", l, v)
+		switch {
+		case strings.HasPrefix(l, "RUC"):
+			xs := strings.Split(v, "-")
+			detail.Ruc = trim(xs[0])
+			detail.Name = trim(xs[1])
+		case strings.HasPrefix(l, "Esta"):
+			detail.Status = v
+		case strings.HasPrefix(l, "Domi"):
+			detail.Address = v
+		case strings.HasPrefix(l, "Cond"):
+			detail.Condition = v
+		case strings.HasPrefix(l, "Tipo Con"):
+			detail.Type = v
+		case strings.HasPrefix(l, "Tipo de Doc"):
+			detail.Dni = regexp.MustCompile("(\\d+)").FindString(v)
+			detail.Name = trim(strings.Split(v, "-")[1])
+		}
+	})
+	return detail, nil
 }
