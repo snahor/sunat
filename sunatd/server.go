@@ -1,44 +1,61 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
+	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/gorilla/mux"
+	"github.com/snahor/sunat"
 )
 
 var (
-	host = flag.String("host", "127.0.0.1", "host to listen on")
-	port = flag.String("port", "8888", "port to listen on")
+	address = flag.String("address", ":8888", "HTTP Listener address")
 )
 
+func handler(w http.ResponseWriter, v interface{}, err error) {
+	var content []byte
+	code := http.StatusOK
+
+	if err != nil {
+		switch err {
+		case sunat.ErrInvalidRUC, sunat.ErrValueNotSupported:
+			code = http.StatusBadRequest
+		default:
+			code = http.StatusInternalServerError
+		}
+
+		content, _ = json.Marshal(map[string]string{"error": err.Error()})
+	} else {
+		content, _ = json.Marshal(v)
+	}
+
+	w.Header().Set("Content-Length", strconv.Itoa(len(content)))
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	w.Write(content)
+}
+
 func SearchHandler(w http.ResponseWriter, r *http.Request) {
-	results, _ := Search(r.FormValue("q"))
-	ServeFormatted(w, r, results)
+	results, err := sunat.Search(r.FormValue("q"))
+	handler(w, results, err)
 }
 
 func DetailHandler(w http.ResponseWriter, r *http.Request) {
-	detail, err := RUCDetail(mux.Vars(r)["ruc"])
-	if err != nil {
-		ServeFormatted(w, r, err)
-	}
-	ServeFormatted(w, r, detail)
+	detail, err := sunat.GetDetail(mux.Vars(r)["ruc"])
+	handler(w, detail, err)
 }
 
 func main() {
-	if !isTesseractInstalled() {
-		panic("Tesseract is not installed.")
-	}
+	flag.Parse()
 
 	r := mux.NewRouter()
 	r.HandleFunc("/search", SearchHandler)
 	r.HandleFunc("/detail/{ruc:\\d{11}}", DetailHandler)
 	http.Handle("/", r)
 
-	flag.Parse()
-
-	if err := http.ListenAndServe(*host+":"+*port, nil); err != nil {
-		println("Couldn't start the server.")
-		println("Reason:", err.Error())
-	}
+	log.Printf("Listening on: %v", *address)
+	log.Fatal(http.ListenAndServe(*address, nil))
 }
