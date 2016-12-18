@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/gorilla/mux"
+	"github.com/julienschmidt/httprouter"
 	"github.com/snahor/sunat"
 )
 
@@ -38,24 +38,23 @@ func handler(w http.ResponseWriter, v interface{}, err error) {
 	w.Write(content)
 }
 
-func SearchHandler(w http.ResponseWriter, r *http.Request) {
+func SearchHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	results, err := sunat.Search(r.FormValue("q"))
 	handler(w, results, err)
 }
 
-func DetailHandler(w http.ResponseWriter, r *http.Request) {
-	detail, err := sunat.GetDetail(mux.Vars(r)["ruc"])
+func DetailHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	detail, err := sunat.GetDetail(ps.ByName("ruc"))
 	handler(w, detail, err)
 }
 
 func main() {
 	flag.Parse()
 
-	r := mux.NewRouter()
-	r.HandleFunc("/search", SearchHandler)
-	r.HandleFunc("/detail/{ruc:\\d{11}}", DetailHandler)
-	http.Handle("/", r)
+	router := httprouter.New()
+	router.GET("/search", SearchHandler)
+	router.GET("/detail/:ruc", DetailHandler)
 
 	log.Printf("Listening on: %v", *address)
-	log.Fatal(http.ListenAndServe(*address, nil))
+	log.Fatal(http.ListenAndServe(*address, router))
 }
