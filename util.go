@@ -3,17 +3,25 @@ package sunat
 import (
 	"regexp"
 	"strconv"
+	"strings"
 )
 
 var (
-	dniPattern  = regexp.MustCompile(`^\d{8}$`)
-	rucPattern  = regexp.MustCompile(`^(10|15|17|20)\d{9}$`)
-	namePattern = regexp.MustCompile(`(^\w+(\s+\w+)*\w$)`)
+	dniPattern     = regexp.MustCompile(`^\d{8}$`)
+	rucPattern     = regexp.MustCompile(`^(10|15|17|20)\d{9}$`)
+	namePattern    = regexp.MustCompile(`(^\w+(\s+\w+)*\w$)`)
+	spacesPattern  = regexp.MustCompile(`\s+`)
+	captchaPattern = regexp.MustCompile("^[A-Z]{4}$")
+	digitsPattern  = regexp.MustCompile(`(\d+)`)
 )
 
+// mod11 validation will be used only for numbers starting with 10
 func isRuc(s string) bool {
 	if !rucPattern.MatchString(s) {
 		return false
+	}
+	if s[:2] != "10" {
+		return true
 	}
 	weights := [10]int{5, 4, 3, 2, 7, 6, 5, 4, 3, 2}
 	checkDigit, _ := strconv.Atoi(string(s[10]))
@@ -31,4 +39,16 @@ func isDni(s string) bool {
 
 func isName(s string) bool {
 	return namePattern.MatchString(s)
+}
+
+func trim(s string) string {
+	return strings.TrimSpace(s)
+}
+
+func removeExtraSpaces(s string) string {
+	return trim(spacesPattern.ReplaceAllLiteralString(s, " "))
+}
+
+func isValidCaptcha(s string) bool {
+	return captchaPattern.MatchString(s)
 }

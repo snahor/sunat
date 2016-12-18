@@ -11,7 +11,6 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -58,8 +57,8 @@ type Detail struct {
 }
 
 type Results struct {
-	Results  []Result `json:"results"`
-	Metadata Metadata `json:"_meta"`
+	Results  []Result `json:"data"`
+	Metadata Metadata `json:"meta"`
 }
 
 func (d *Detail) ToResults() *Results {
@@ -107,6 +106,9 @@ func Search(q string) (*Results, error) {
 		return nil, err
 	}
 	data.Set("codigo", captcha)
+
+	// a "better and friendlier" response
+	//data.Set("modo", "1")
 
 	res, err := client.PostForm(searchURL, data)
 	if err != nil {
@@ -179,8 +181,6 @@ func getCaptcha(c *http.Client) (string, error) {
 	defer file.Close()
 
 	text, err := captchaToText(file.Name())
-	log.Printf("Removing temp image: %q...", file.Name())
-	defer os.Remove(file.Name())
 
 	if err != nil {
 		return "", err
@@ -188,10 +188,14 @@ func getCaptcha(c *http.Client) (string, error) {
 
 	log.Printf("Captcha: %q", text)
 
-	// captcha must have 4 letters
-	if ok, err := regexp.MatchString("^[A-Z]{4}$", text); !ok || err != nil {
+	if !isValidCaptcha(text) {
 		return "", ErrInvalidCaptcha
 	}
+
+	// remove the image only if everythng went well
+	log.Printf("Removing temp image: %q...", file.Name())
+	defer os.Remove(file.Name())
+
 	return text, nil
 }
 
@@ -244,12 +248,9 @@ func hasError(doc *goquery.Document) error {
 	return nil
 }
 
-func trim(s string) string {
-	return strings.TrimSpace(s)
-}
-
 func parseResults(res *http.Response) (*Results, error) {
 	log.Print("Parsing results...")
+
 	doc, err := goquery.NewDocumentFromResponse(res)
 	if err != nil {
 		return nil, err
@@ -268,8 +269,7 @@ func parseResults(res *http.Response) (*Results, error) {
 	if length < 2 {
 		results.Results = make([]Result, 0)
 	} else {
-		re := regexp.MustCompile("(\\d+)")
-		ns := re.FindAllString(doc.Find("td.lnk7").First().Text(), -1)
+		ns := digitsPattern.FindAllString(doc.Find("td.lnk7").First().Text(), -1)
 		if len(ns) == 3 {
 			from, _ := strconv.Atoi(ns[0])
 			total, _ := strconv.Atoi(ns[2])
@@ -314,13 +314,13 @@ func parseDetail(res *http.Response) (*Detail, error) {
 		case strings.HasPrefix(l, "Esta"):
 			detail.Status = v
 		case strings.HasPrefix(l, "Domi"):
-			detail.Address = v
+			detail.Address = removeExtraSpaces(v)
 		case strings.HasPrefix(l, "Cond"):
 			detail.Condition = v
 		case strings.HasPrefix(l, "Tipo Con"):
 			detail.Type = v
 		case strings.HasPrefix(l, "Tipo de Doc"):
-			detail.Dni = regexp.MustCompile("(\\d+)").FindString(v)
+			detail.Dni = digitsPattern.FindString(v)
 			detail.Name = trim(strings.Split(v, "-")[1])
 		}
 	})
