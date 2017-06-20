@@ -106,43 +106,20 @@ func Test_parseDetail(t *testing.T) {
 	}
 }
 
-func TestDetailToResult(t *testing.T) {
-	th := testHelper{t}
-	d, _ := parseDetail(fakeResponseFromFile("testdata/person_detail.html"))
-	rs := d.ToResults()
-	th.assert("TestDetailToResult", 1, rs.Metadata.Total)
-	th.assert("TestDetailToResult", 1, len(rs.Results))
-	th.assert("TestDetailToResult", "HUMALA TASSO, OLLANTA MOISES", rs.Results[0].Name)
-	th.assert("TestDetailToResult", "10441233901", rs.Results[0].Ruc)
-}
-
 func TestGetDetail(t *testing.T) {
 	th := testHelper{t}
 	d, err := GetDetail("10441233901")
-	if err != nil {
-		if err != ErrInvalidCaptcha {
-			t.Error(err)
-		}
-	} else {
-		th.assert("getDetail()", "HUMALA TASSO, OLLANTA MOISES", d.Name)
-		th.assert("getDetail()", "44123390", d.Dni)
-	}
+	th.assert("getDetail()", "HUMALA TASSO, OLLANTA MOISES", d.Name)
+	th.assert("getDetail()", "44123390", d.Dni)
 	_, err = GetDetail("10441233909")
 	th.assert("GetDetail", ErrInvalidRUC, err)
 }
 
 func TestSearch(t *testing.T) {
 	th := testHelper{t}
-	rs, err := Search("OLLANTA HUMALA TASSO")
-	if err != nil {
-		if err != ErrInvalidCaptcha {
-			t.Error(err)
-		}
-	} else {
-		th.assert("Search", 3, rs.Metadata.Total)
-		th.assert("Search", 3, len(rs.Results))
-	}
-
-	_, err = Search("10441233901")
-	th.assert("Search", ErrValueNotSupported, err)
+	rs, _ := Search("OLLANTA HUMALA TASSO")
+	th.assert("Search", 3, rs.Metadata.Total)
+	th.assert("Search", 3, len(rs.Results))
+	_, err := Search("10441233901")
+	th.assert("Search", ErrRUCCanNotBeUsed, err)
 }

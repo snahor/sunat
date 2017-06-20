@@ -7,12 +7,11 @@ import (
 )
 
 var (
-	dniPattern     = regexp.MustCompile(`^\d{8}$`)
-	rucPattern     = regexp.MustCompile(`^(10|15|17|20)\d{9}$`)
-	namePattern    = regexp.MustCompile(`(^\w+(\s+\w+)*\w$)`)
-	spacesPattern  = regexp.MustCompile(`\s+`)
-	captchaPattern = regexp.MustCompile("^[A-Z]{4}$")
-	digitsPattern  = regexp.MustCompile(`(\d+)`)
+	dniPattern    = regexp.MustCompile(`^\d{8}$`)
+	rucPattern    = regexp.MustCompile(`^(10|15|17|20)\d{9}$`)
+	namePattern   = regexp.MustCompile(`(^\w+(\s+\w+)*\w$)`)
+	spacesPattern = regexp.MustCompile(`\s+`)
+	digitsPattern = regexp.MustCompile(`(\d+)`)
 )
 
 // mod11 validation will be used only for numbers starting with 10
@@ -47,8 +46,4 @@ func trim(s string) string {
 
 func removeExtraSpaces(s string) string {
 	return trim(spacesPattern.ReplaceAllLiteralString(s, " "))
-}
-
-func isValidCaptcha(s string) bool {
-	return captchaPattern.MatchString(s)
 }

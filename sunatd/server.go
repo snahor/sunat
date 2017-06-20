@@ -38,12 +38,17 @@ func handler(w http.ResponseWriter, v interface{}, err error) {
 	w.Write(content)
 }
 
-func SearchHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	results, err := sunat.Search(r.FormValue("q"))
-	handler(w, results, err)
+func searchHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	query := r.FormValue("q")
+	results, err := sunat.Search(query)
+	if err == sunat.ErrRUCCanNotBeUsed {
+		http.Redirect(w, r, "/detail/"+query, http.StatusSeeOther)
+	} else {
+		handler(w, results, err)
+	}
 }
 
-func DetailHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+func detailHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	detail, err := sunat.GetDetail(ps.ByName("ruc"))
 	handler(w, detail, err)
 }
@@ -52,8 +57,8 @@ func main() {
 	flag.Parse()
 
 	router := httprouter.New()
-	router.GET("/search", SearchHandler)
-	router.GET("/detail/:ruc", DetailHandler)
+	router.GET("/search", searchHandler)
+	router.GET("/detail/:ruc", detailHandler)
 
 	log.Printf("Listening on: %v", *address)
 	log.Fatal(http.ListenAndServe(*address, router))

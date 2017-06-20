@@ -2,15 +2,13 @@ package sunat
 
 import (
 	"errors"
-	"io"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
-	"os"
-	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -20,16 +18,16 @@ import (
 
 const (
 	searchURL  = "http://www.sunat.gob.pe/cl-ti-itmrconsruc/jcrS03Alias"
-	captchaURL = "http://www.sunat.gob.pe/cl-ti-itmrconsruc/captcha?accion=image"
+	captchaURL = "http://www.sunat.gob.pe/cl-ti-itmrconsruc/captcha"
 	detailURL  = "http://www.sunat.gob.pe/cl-ti-itmrconsruc/DatosRazSocCel.jsp"
 	perPage    = 30
 )
 
 var (
 	timeOut              = time.Duration(10 * time.Second)
-	ErrInvalidCaptcha    = errors.New("Invalid Captcha")
 	ErrValueNotSupported = errors.New("Value not supported")
 	ErrInvalidRUC        = errors.New("Invalid RUC")
+	ErrRUCCanNotBeUsed   = errors.New("RUC can not be used")
 )
 
 type Result struct {
@@ -37,7 +35,7 @@ type Result struct {
 	Name     string `json:"name"`
 	Location string `json:"location"`
 	Status   string `json:"status"`
-	//c        *http.Client
+	Href     string `json:"href"`
 }
 
 type Metadata struct {
@@ -61,30 +59,20 @@ type Results struct {
 	Metadata Metadata `json:"meta"`
 }
 
-func (d *Detail) ToResults() *Results {
-	rs := &Results{}
-	rs.Metadata.Total = 1
-	rs.Metadata.PerPage = perPage
-	rs.Results = []Result{
-		Result{
-			Name:     d.Name,
-			Ruc:      d.Ruc,
-			Location: d.Address,
-			Status:   d.Status,
-		},
-	}
-	return rs
-}
-
 func (r *Result) Detail() (*Detail, error) {
-	client, _ := newHttpClient()
+	client, err := newHTTPClient()
+	if err != nil {
+		return nil, err
+	}
 	return getDetail(r.Ruc, client)
 }
 
 func Search(q string) (*Results, error) {
-	data := make(url.Values)
+	data := url.Values{}
 	data.Set("contexto", "ti-it")
 	switch {
+	case isRuc(q):
+		return nil, ErrRUCCanNotBeUsed
 	case isDni(q):
 		data.Set("accion", "consPorTipdoc")
 		data.Set("nrodoc", q)
@@ -92,20 +80,20 @@ func Search(q string) (*Results, error) {
 	case isName(q):
 		data.Set("accion", "consPorRazonSoc")
 		data.Set("razSoc", q)
-	case true:
+	default:
 		return nil, ErrValueNotSupported
 	}
 
-	client, err := newHttpClient()
+	client, err := newHTTPClient()
 	if err != nil {
 		return nil, err
 	}
 
-	captcha, err := getCaptcha(client)
+	number, err := getRandomNumber(client)
 	if err != nil {
 		return nil, err
 	}
-	data.Set("codigo", captcha)
+	data.Set("numRnd", number)
 
 	// a "better and friendlier" response
 	//data.Set("modo", "1")
@@ -114,24 +102,26 @@ func Search(q string) (*Results, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	results, err := parseResults(res)
 	if err != nil {
 		return nil, err
 	}
+
 	return results, nil
 }
 
-func GetDetail(q string) (*Detail, error) {
-	if !isRuc(q) {
+func GetDetail(ruc string) (*Detail, error) {
+	if !isRuc(ruc) {
 		return nil, ErrInvalidRUC
 	}
 
-	client, err := newHttpClient()
+	client, err := newHTTPClient()
 	if err != nil {
 		return nil, err
 	}
 
-	detail, err := getDetail(q, client)
+	detail, err := getDetail(ruc, client)
 	if err != nil {
 		return nil, err
 	}
@@ -143,7 +133,7 @@ func dialTimeout(network, addr string) (net.Conn, error) {
 	return net.DialTimeout(network, addr, timeOut)
 }
 
-func newHttpClient() (*http.Client, error) {
+func newHTTPClient() (*http.Client, error) {
 	transport := http.Transport{Dial: dialTimeout}
 	jar, _ := cookiejar.New(nil)
 	client := &http.Client{
@@ -155,62 +145,45 @@ func newHttpClient() (*http.Client, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	defer res.Body.Close()
 
 	return client, nil
 }
 
-func getCaptcha(c *http.Client) (string, error) {
-	log.Print("Getting captcha...")
-	res, err := c.Get(captchaURL)
+func getRandomNumber(client *http.Client) (string, error) {
+	data := url.Values{}
+	data.Set("accion", "random")
+
+	res, err := client.PostForm(captchaURL, data)
 	if err != nil {
 		return "", err
 	}
+
 	defer res.Body.Close()
 
-	file, err := ioutil.TempFile("/tmp", "img")
+	bodyBytes, err := ioutil.ReadAll(res.Body)
 	if err != nil {
 		return "", err
 	}
 
-	// write image
-	if _, err := io.Copy(file, res.Body); err != nil {
-		return "", err
-	}
-	log.Printf("Closing temp image: %q...", file.Name())
-	defer file.Close()
-
-	text, err := captchaToText(file.Name())
-
-	if err != nil {
-		return "", err
-	}
-
-	log.Printf("Captcha: %q", text)
-
-	if !isValidCaptcha(text) {
-		return "", ErrInvalidCaptcha
-	}
-
-	// remove the image only if everythng went well
-	log.Printf("Removing temp image: %q...", file.Name())
-	defer os.Remove(file.Name())
-
-	return text, nil
+	return string(bodyBytes), nil
 }
 
 func getDetail(ruc string, client *http.Client) (*Detail, error) {
-	data := make(url.Values)
-	data.Set("contexto", "ti-it")
-	data.Set("accion", "consPorRuc")
-	data.Set("nroRuc", ruc)
-
-	captcha, err := getCaptcha(client)
+	log.Print("----------")
+	log.Print("Requesting details...")
+	defer log.Print("----------")
+	number, err := getRandomNumber(client)
 	if err != nil {
-		return nil, ErrInvalidCaptcha
+		return nil, err
 	}
-	data.Set("codigo", captcha)
 
+	data := url.Values{}
+	data.Set("numRnd", number)
+	data.Set("nroRuc", ruc)
+	data.Set("accion", "consPorRuc")
+	log.Printf("Params: %v", data)
 	res, err := client.PostForm(searchURL, data)
 	if err != nil {
 		return nil, err
@@ -222,22 +195,6 @@ func getDetail(ruc string, client *http.Client) (*Detail, error) {
 	}
 
 	return detail, nil
-}
-
-func captchaToText(path string) (string, error) {
-	output, err := exec.Command(
-		"tesseract",
-		path,
-		"stdout",
-		"-psm", "8",
-		"-c", "tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ",
-	).Output()
-
-	if err != nil {
-		return "", err
-	}
-
-	return string(output[:4]), nil
 }
 
 func hasError(doc *goquery.Document) error {
@@ -255,6 +212,7 @@ func parseResults(res *http.Response) (*Results, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	if err = hasError(doc); err != nil {
 		return nil, err
 	}
@@ -281,14 +239,17 @@ func parseResults(res *http.Response) (*Results, error) {
 
 		rows.Slice(1, length).Each(func(i int, s *goquery.Selection) {
 			cols := s.Find("td")
+			ruc := trim(cols.Eq(0).Find("a").Text())
 			results.Results = append(results.Results, Result{
-				Ruc:      trim(cols.Eq(0).Find("a").Text()),
+				Ruc:      ruc,
 				Name:     trim(cols.Eq(1).Text()),
 				Location: trim(cols.Eq(2).Text()),
 				Status:   trim(cols.Eq(3).Text()),
+				Href:     fmt.Sprintf("http://localhost:8888/detail/%v", ruc),
 			})
 		})
 	}
+
 	return results, nil
 }
 
@@ -297,9 +258,11 @@ func parseDetail(res *http.Response) (*Detail, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	if err = hasError(doc); err != nil {
 		return nil, err
 	}
+
 	detail := &Detail{}
 	rows := doc.Find("#print table tr")
 	rows.Slice(1, rows.Length()).Each(func(i int, s *goquery.Selection) {
@@ -324,5 +287,6 @@ func parseDetail(res *http.Response) (*Detail, error) {
 			detail.Name = trim(strings.Split(v, "-")[1])
 		}
 	})
+
 	return detail, nil
 }
