@@ -14,13 +14,9 @@ var (
 	digitsPattern = regexp.MustCompile(`(\d+)`)
 )
 
-// mod11 validation will be used only for numbers starting with 10
 func isRuc(s string) bool {
 	if !rucPattern.MatchString(s) {
 		return false
-	}
-	if s[:2] != "10" {
-		return true
 	}
 	weights := [10]int{5, 4, 3, 2, 7, 6, 5, 4, 3, 2}
 	checkDigit, _ := strconv.Atoi(string(s[10]))
@@ -29,7 +25,11 @@ func isRuc(s string) bool {
 		digit, _ := strconv.Atoi(string(s[i]))
 		sum += weight * digit
 	}
-	return checkDigit == (11 - (sum % 11))
+	mod := 11 - (sum % 11)
+	if mod >= 10 {
+		mod -= 10
+	}
+	return checkDigit == mod
 }
 
 func isDni(s string) bool {

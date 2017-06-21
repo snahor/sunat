@@ -25,6 +25,7 @@ func Test_isRuc(t *testing.T) {
 		"20254138577": true,
 		"12345678909": false,
 		"asdfghjkl12": false,
+		"20601020841": true,
 	}
 	for k, expected := range fixtures {
 		if isRuc(k) != expected {
